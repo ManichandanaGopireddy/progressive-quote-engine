@@ -1,0 +1,33 @@
+﻿server:
+  port: 8082
+
+spring:
+  application:
+    name: quote-engine-service
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: your-email@gmail.com
+    password: your-app-password-here
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: smtp.gmail.com
+
+aws:
+  dynamodb:
+    region: us-east-1
+    tables:
+      quotes: quotes
+
+api1:
+  base-url: http://localhost:8081
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

@@ -1,0 +1,410 @@
+openapi: 3.0.3
+info:
+  title: Quote Engine API
+  version: 1.0.0
+
+tags:
+- name: Quote
+  description: Quote calculation and retrieval
+- name: Coverage
+  description: Coverage options
+- name: Clue
+  description: CLUE verification results
+
+paths:
+
+  /api/v2/quotes/coverage-options:
+    get:
+      tags: [ Coverage ]
+      operationId: getCoverageOptions
+      summary: Get available coverage tiers and deductible options
+      responses:
+        '200':
+          description: Coverage options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageOptionsResponse'
+
+  /api/v2/quotes/calculate:
+    post:
+      tags: [ Quote ]
+      operationId: calculateQuote
+      summary: Calculate insurance quote from session data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteCalculateRequest'
+      responses:
+        '201':
+          description: Quote calculated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteCalculateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Quote session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Quote Session Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v2/quotes/{quoteId}:
+    get:
+      tags: [ Quote ]
+      operationId: getQuote
+      summary: Retrieve a previously calculated quote
+      parameters:
+      - name: quoteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Quote found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteCalculateResponse'
+        '404':
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: Quote expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v2/quotes/{quoteId}/email:
+    post:
+      tags: [ Quote ]
+      operationId: emailQuote
+      summary: Send quote to customer email
+      parameters:
+      - name: quoteId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteEmailRequest'
+      responses:
+        '200':
+          description: Email sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteEmailResponse'
+        '404':
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Email delivery failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v2/quotes/clue/{quoteReferenceId}:
+    get:
+      tags: [ Clue ]
+      operationId: getClueReport
+      summary: Get CLUE verification result for a quote session
+      parameters:
+      - name: quoteReferenceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: CLUE report found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClueReportResponse'
+        '404':
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+
+    QuoteCalculateRequest:
+      type: object
+      required: [ quoteReferenceId, priorInsurance ]
+      properties:
+        quoteReferenceId:
+          type: string
+          format: uuid
+          description: Reference ID from API 1 quote session
+        priorInsurance:
+          $ref: '#/components/schemas/PriorInsurance'
+
+    PriorInsurance:
+      type: object
+      required: [ hasPriorInsurance ]
+      properties:
+        hasPriorInsurance:
+          type: boolean
+        priorInsurer:
+          type: string
+          maxLength: 100
+        yearsWithPriorInsurer:
+          type: integer
+          minimum: 0
+        lapseInCoverage:
+          type: boolean
+          default: false
+        lapseMonths:
+          type: integer
+          minimum: 0
+
+    QuoteCalculateResponse:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        quoteReferenceId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [ ACTIVE, EXPIRED ]
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuotePackage'
+        vehicleBreakdowns:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleBreakdown'
+        discountsApplied:
+          type: array
+          items:
+            $ref: '#/components/schemas/Discount'
+        averageDriverAge:
+          type: number
+          format: double
+        clueRiskLevel:
+          type: string
+          enum: [ CLEAN, MINOR, MODERATE, HIGH_RISK, SUSPENDED ]
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+
+    QuotePackage:
+      type: object
+      properties:
+        tierName:
+          type: string
+          enum: [ BASIC, CHOICE, RECOMMENDED ]
+        description:
+          type: string
+        sixMonthTotal:
+          type: number
+          format: double
+        monthlyPayment:
+          type: number
+          format: double
+        payInFullAmount:
+          type: number
+          format: double
+        payInFullSavings:
+          type: number
+          format: double
+        deductibleAmount:
+          type: integer
+
+    VehicleBreakdown:
+      type: object
+      properties:
+        vehicleId:
+          type: string
+          format: uuid
+        year:
+          type: integer
+        make:
+          type: string
+        model:
+          type: string
+        basePremium:
+          type: number
+          format: double
+        vehicleAgeFactor:
+          type: number
+          format: double
+        vehicleAccidentFactor:
+          type: number
+          format: double
+        territoryFactor:
+          type: number
+          format: double
+        dlRecordFactor:
+          type: number
+          format: double
+        driverAgeFactor:
+          type: number
+          format: double
+        finalPremium:
+          type: number
+          format: double
+
+    Discount:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        savingsAmount:
+          type: number
+          format: double
+
+    CoverageOptionsResponse:
+      type: object
+      properties:
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoverageTier'
+        deductibles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeductibleOption'
+
+    CoverageTier:
+      type: object
+      properties:
+        tierId:
+          type: string
+          enum: [ BASIC, CHOICE, RECOMMENDED ]
+        name:
+          type: string
+        description:
+          type: string
+        multiplier:
+          type: number
+          format: double
+
+    DeductibleOption:
+      type: object
+      properties:
+        amount:
+          type: integer
+        description:
+          type: string
+
+    QuoteEmailRequest:
+      type: object
+      properties:
+        recipientEmail:
+          type: string
+          format: email
+          description: Optional. Uses session email if not provided.
+
+    QuoteEmailResponse:
+      type: object
+      properties:
+        sent:
+          type: boolean
+        sentTo:
+          type: string
+        message:
+          type: string
+
+    ClueReportResponse:
+      type: object
+      properties:
+        quoteReferenceId:
+          type: string
+          format: uuid
+        driverReports:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverClueReport'
+        overallRiskLevel:
+          type: string
+          enum: [ CLEAN, MINOR, MODERATE, HIGH_RISK, SUSPENDED ]
+
+    DriverClueReport:
+      type: object
+      properties:
+        driverId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        licensePrefix:
+          type: string
+        verifiedAccidents:
+          type: integer
+        verifiedViolations:
+          type: boolean
+        sr22Override:
+          type: boolean
+        licenseStatusOverride:
+          type: string
+        discrepancyFound:
+          type: boolean
+        discrepancyDetails:
+          type: string
+        riskLevel:
+          type: string
+          enum: [ CLEAN, MINOR, MODERATE, HIGH_RISK, SUSPENDED ]
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: array
+          items:
+            type: string
